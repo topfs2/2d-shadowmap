@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Shadows</title>    
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/85/three.min.js"></script>
+        <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+        <script src="src/all.js"></script>
+
+        <script id="vertexShader" type="x-shader/x-vertex">
+            varying vec2 vUv;
+
+            void main() {
+                vUv = uv;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+            }
+        </script>
+
+        <script id="fragmentShaderShadowDepth" type="x-shader/x-fragment">
+            varying vec2 vUv;
+            uniform sampler2D tDiffuse;
+
+            #define M_PI 3.1415926535897932384626433832795
+
+            void main() {
+                float theta = vUv.x * M_PI * 2.0 + M_PI * 0.5;
+                float depth = 2.0;
+
+                for (float r = 0.0; r <= 2.0; r += 0.01) {
+                    float tX = r * sin(-theta);
+                    float tY = r * cos(-theta);
+
+                    vec2 uv = vec2(tX * 0.5, tY * 0.5) + vec2(0.5);
+                    float p = texture2D(tDiffuse, uv).r;
+                    if (p < 0.1) {
+                        depth = min(r, depth);
+                    }
+                }
+
+                gl_FragColor = vec4(vec3(depth * 0.5), 1.0);
+            }
+        </script>
+
+        <script id="fragmentShaderShadowMap" type="x-shader/x-fragment">
+            #define M_PI 3.1415926535897932384626433832795
+
+            varying vec2 vUv;
+            uniform sampler2D tDiffuse;
+
+            float length2(vec2 v) {
+                return v.x * v.x + v.y * v.y;
+            }
+
+            void main() {
+                vec2 v = vUv * 2.0 - vec2(1);
+                float theta = atan(v.y, v.x);
+                float r = distance(v, vec2(0));
+
+                float x = (theta + M_PI) / (2.0 * M_PI);
+
+                float depth = texture2D(tDiffuse, vec2(x, 0.0)).r * 2.0;
+
+                vec4 color = vec4(1.0, 0.0, 1.0, 1.0);
+                float d = 1.0 - length2(v);
+                gl_FragColor = vec4(1.0 - step(depth, r)) * d * color;
+            }
+        </script>
+
+        <script id="fragmentShaderShadowMapBlur" type="x-shader/x-fragment">
+            varying vec2 vUv;
+            uniform sampler2D tDiffuse;
+
+            void main() {
+                vec2 v = vUv * 2.0 - vec2(1);
+                float r = distance(v, vec2(0)) / 2.0;
+
+                vec4 color = vec4(0.0);
+                float total = 0.0;
+                float d = 0.01 * r;
+
+                for (float i = -3.0; i < 4.0; i++) {
+                    for (float j = -3.0; j < 4.0; j++) {
+                        vec2 delta = vec2(i, j) * d;
+                        vec4 sample = texture2D(tDiffuse, vUv + delta);
+                        color += sample;
+                        total += 1.0;
+                    }
+                }
+                
+                gl_FragColor=color / total;
+            }
+        </script>
+
+        <script id="fragmentShaderLightCompose" type="x-shader/x-fragment">
+            varying vec2 vUv;
+            uniform sampler2D tShadow;
+            uniform sampler2D tDiffuse;
+
+            void main() {
+                vec2 v = vUv * 2.0 - vec2(1);
+
+                vec4 light = texture2D(tShadow, vUv);
+                vec4 diffuse = vec4(1.0 - texture2D(tDiffuse, vUv).r, 0.0, 0.0, 1.0);
+
+                gl_FragColor = light + diffuse;
+            }
+        </script>
+
+        <style>
+            body {
+                margin; 0;
+            }
+            canvas {
+                float: left;
+                border: 1px solid black;
+            }
+
+            .forms {
+                float: right;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="forms">
+            <h3>Render pipeline</h3>
+            <form id="pipeline">
+                <input type="radio" name="radioName" value="part" />part<br />
+                <input type="radio" name="radioName" value="shadowdepth" />shadowdepth<br />
+                <input type="radio" name="radioName" value="shadowmap" />shadowmap<br />
+                <input type="radio" name="radioName" value="shadowmap_blurred" />shadowmap blurred<br />
+                <input type="radio" name="radioName" value="lightmap" />lightmap<br />
+                <input type="radio" name="radioName" value="composed" checked/>composed<br />
+            </form>
+
+            <h3>Occlusion map</h3>
+            <form id="pixmap">
+                <input type="radio" name="radioName" value="1" checked />1<br />
+                <input type="radio" name="radioName" value="2" />2<br />
+            </form>
+
+            <h3>Options</h3>
+            <form id="options">
+                <input type="checkbox" name="mouse" checked />Track mouse<br />
+            </form>
+        </div>
+    </body>
+</html>
